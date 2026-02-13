@@ -9,6 +9,9 @@ const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
+app.get('/', (req, res) => {
+    res.send('hii from lead generation backend ');
+})
 
 // API Endpoint to search hospitals
 app.get('/api/search-hospitals', async (req, res) => {
