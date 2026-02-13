@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const puppeteer = require('puppeteer');
+const connectiondb = require('./db/connection')
 require('dotenv').config();
 
 const app = express();
@@ -108,7 +109,18 @@ app.get('/api/search-hospitals', async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to scrape data' });
     }
 });
+// Start Server after DB Connection
+const startServer = async () => {
+    try {
+        await connectiondb();
+        app.listen(PORT, () => {
+            console.log(`🚀 Backend Server running on http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error);
+    }
+};
 
-app.listen(PORT, () => {
-    console.log(`Backend Server running on http://localhost:${PORT}`);
-});
+startServer();
+
+
