@@ -1,17 +1,30 @@
 const express = require('express');
 const cors = require('cors');
-const puppeteer = require('puppeteer');
-const connectiondb = require('./db/connection')
+const connectiondb = require('./db/connection');
 require('dotenv').config();
+
+// Determine if we are in production (Vercel)
+const isProd = process.env.NODE_ENV === 'production';
+
+let puppeteer;
+let chromium;
+
+if (isProd) {
+    puppeteer = require('puppeteer-core');
+    chromium = require('@sparticuz/chromium');
+} else {
+    puppeteer = require('puppeteer');
+}
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
+
 app.get('/health', (req, res) => {
-    res.send('hii from lead generation backend ');
-})
+    res.send('hii from lead generation backend');
+});
 
 // API Endpoint to search hospitals
 app.get('/api/search-hospitals', async (req, res) => {
@@ -28,10 +41,20 @@ app.get('/api/search-hospitals', async (req, res) => {
 
     let browser;
     try {
-        browser = await puppeteer.launch({
-            headless: "new",
-            args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        });
+        if (isProd) {
+            browser = await puppeteer.launch({
+                args: chromium.args,
+                defaultViewport: chromium.defaultViewport,
+                executablePath: await chromium.executablePath(),
+                headless: chromium.headless,
+                ignoreHTTPSErrors: true,
+            });
+        } else {
+            browser = await puppeteer.launch({
+                headless: "new",
+                args: ["--no-sandbox", "--disable-setuid-sandbox"],
+            });
+        }
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -76,7 +99,7 @@ app.get('/api/search-hospitals', async (req, res) => {
 
             if (allResults.length === previousCount) {
                 retryCount++;
-                if (retryCount > 3) break; // Truly no more new results after 3 scrolls
+                if (retryCount > 3) break;
             } else {
                 retryCount = 0;
             }
@@ -91,7 +114,7 @@ app.get('/api/search-hospitals', async (req, res) => {
                     window.scrollBy(0, 1500);
                 }
             });
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for lazy loading
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
         const paginatedData = allResults.slice(startFrom, startFrom + maxResults);
@@ -112,18 +135,23 @@ app.get('/api/search-hospitals', async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to scrape data' });
     }
 });
-// Start Server after DB Connection
+
+// Start Server after DB Connection (only if not on Vercel)
 const startServer = async () => {
     try {
         await connectiondb();
-        app.listen(PORT, () => {
-            console.log(`🚀 Backend Server running on http://localhost:${PORT}`);
-        });
+        if (!process.env.VERCEL) {
+            app.listen(PORT, () => {
+                console.log(`🚀 Backend Server running on http://localhost:${PORT}`);
+            });
+        }
     } catch (error) {
         console.error('Failed to start server:', error);
     }
 };
 
 startServer();
+
+module.exports = app;
 
 
