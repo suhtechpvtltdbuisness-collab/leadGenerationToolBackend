@@ -1,5 +1,7 @@
 const { MongoClient } = require('mongodb');
 
+let db = null;
+
 async function connectionDb() {
     const url = process.env.MONGODB_URI || process.env.DATABASSURL; // Check both
     if (!url) {
@@ -10,11 +12,20 @@ async function connectionDb() {
         const client = new MongoClient(url);
         await client.connect();
         console.log('✅ Connected to MongoDB');
-        return client.db(); // Return database instance if needed
+        db = client.db(); // Store database instance
+        return db;
     } catch (error) {
         console.error('❌ Failed to connect to MongoDB:', error.message);
         process.exit(1); // Stop server if DB connection fails
     }
 }
 
-module.exports = connectionDb;
+// Function to get the database instance
+function getDb() {
+    if (!db) {
+        throw new Error('Database not initialized. Call connectionDb() first.');
+    }
+    return db;
+}
+
+module.exports = { connectionDb, getDb };

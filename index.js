@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const connectiondb = require('./db/connection');
+const { connectionDb, getDb } = require('./db/connection');
+const { validateLead } = require('./db/schema');
 require('dotenv').config();
 
 // Determine if we are in production (Vercel)
@@ -22,8 +23,73 @@ const PORT = process.env.PORT || 5001;
 app.use(cors());
 app.use(express.json());
 
+// Log all requests to debug 404s
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
 app.get('/health', (req, res) => {
     res.send('hii from lead generation backend');
+});
+
+// API Endpoint to store leads (single or multiple)
+app.post('/api/leads', async (req, res) => {
+    console.log('📥 Received POST request to /api/leads');
+    try {
+        const db = getDb();
+        const leadsCollection = db.collection('leads');
+
+        // Handle both single lead and array of leads
+        const leadsData = Array.isArray(req.body) ? req.body : [req.body];
+
+        if (leadsData.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'At least one lead is required'
+            });
+        }
+
+        const validatedLeads = leadsData.map(lead => validateLead(lead));
+        const result = await leadsCollection.insertMany(validatedLeads);
+
+        res.status(201).json({
+            success: true,
+            message: `${result.insertedCount} lead(s) stored successfully`,
+            insertedCount: result.insertedCount,
+            insertedIds: result.insertedIds
+        });
+    } catch (error) {
+        console.error('Error storing lead:', error);
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// API Endpoint to get all leads
+app.get('/api/leads', async (req, res) => {
+    console.log('📤 Received GET request to /api/leads');
+    try {
+        const db = getDb();
+        const leadsCollection = db.collection('leads');
+
+        // Fetch all leads, sorted by latest created
+        const leads = await leadsCollection.find({}).sort({ createdAt: -1 }).toArray();
+
+        res.status(200).json({
+            success: true,
+            count: leads.length,
+            leads: leads
+        });
+    } catch (error) {
+        console.error('Error fetching leads:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch leads'
+        });
+    }
 });
 
 // API Endpoint to search hospitals
@@ -139,10 +205,18 @@ app.get('/api/search-hospitals', async (req, res) => {
 // Start Server after DB Connection (only if not on Vercel)
 const startServer = async () => {
     try {
-        await connectiondb();
+        await connectionDb();
         if (!process.env.VERCEL) {
-            app.listen(PORT, () => {
-                console.log(`🚀 Backend Server running on http://localhost:${PORT}`);
+            const server = app.listen(PORT, '0.0.0.0', () => {
+                console.log(`🚀 LeadFlow Backend running on http://0.0.0.0:${PORT}`);
+                console.log(`📡 Registered Routes: GET /health, POST /api/leads, GET /api/search-hospitals`);
+            });
+
+            server.on('error', (e) => {
+                if (e.code === 'EADDRINUSE') {
+                    console.error(`❌ Port ${PORT} is already in use by another process!`);
+                    process.exit(1);
+                }
             });
         }
     } catch (error) {
@@ -151,6 +225,16 @@ const startServer = async () => {
 };
 
 startServer();
+
+// Custom 404 handler to debug
+app.use((req, res) => {
+    console.log(`❌ 404 Not Found: ${req.method} ${req.url}`);
+    res.status(404).json({
+        success: false,
+        error: `Route ${req.method} ${req.url} not found on LeadFlow Backend`,
+        timestamp: new Date().toISOString()
+    });
+});
 
 module.exports = app;
 
