@@ -20,7 +20,10 @@ if (isProd) {
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-app.use(cors());
+app.use(cors({
+    origin: ['https://lead-generation-tool-backend.vercel.app', 'http://localhost:3000'],
+    credentials: true
+}));
 app.use(express.json());
 
 // Log all requests to debug 404s
