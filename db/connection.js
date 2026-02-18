@@ -1,75 +1,18 @@
-const { MongoClient } = require("mongodb");
-require("dotenv").config();
+const mongoose = require("mongoose");
 
-let client;
-let db;
-
-// Helper to build Mongo client options, including optional relaxed TLS
-const buildClientOptions = () => {
-  const allowInvalidTls = process.env.ALLOW_INVALID_TLS === "true";
-
-  const options = {
-    maxPoolSize: 10,
-    serverSelectionTimeoutMS: 10000,
-  };
-
-  // For mongodb+srv URIs TLS is implied by the URI. When ALLOW_INVALID_TLS=true,
-  // relax TLS validation as much as possible (invalid certs, hostname mismatch).
-  // This is the closest equivalent to `ssl: { rejectUnauthorized: false }`.
-  if (allowInvalidTls) {
-    options.tlsInsecure = true;
-  }
-
-  return options;
-};
-
-const getMongoUri = () => {
-  const uri = process.env.MONGODB_URI || process.env.DATABASSURL;
-  if (!uri) {
-    throw new Error(
-      "MongoDB connection string is not defined. Set MONGODB_URI or DATABASSURL in your environment.",
-    );
-  }
-  return uri;
-};
-
-// Establish a single shared connection for the process
-const connectionDb = async () => {
-  if (db) {
-    return db;
-  }
-
-  const uri = getMongoUri();
-
-  if (!client) {
-    client = new MongoClient(uri, buildClientOptions());
-  }
-
+const connectDB = async () => {
   try {
-    await client.connect();
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
 
-    // If a DB name is provided, use it, otherwise let the driver pick the default
-    const dbName = process.env.MONGODB_DB || undefined;
-    db = client.db(dbName);
-
-    console.log(`✅ Connected to MongoDB${dbName ? ` (db: ${dbName})` : ""}`);
-    return db;
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    return conn;
   } catch (error) {
-    console.error("❌ Failed to connect to MongoDB:", error);
-    // Re-throw so the caller (server startup) can decide to abort
-    throw error;
+    console.error(`Error: ${error.message}`);
+    process.exit(1);
   }
 };
 
-// Lazy getter used in request handlers; ensures connection is established
-const getDb = async () => {
-  if (db) {
-    return db;
-  }
-  return connectionDb();
-};
-
-module.exports = {
-  connectionDb,
-  getDb,
-};
+module.exports = connectDB;
