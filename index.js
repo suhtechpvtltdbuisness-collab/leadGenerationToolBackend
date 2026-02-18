@@ -47,7 +47,7 @@ app.get("/health", (req, res) => {
 });
 
 // API Endpoint to check database connection
-app.get("/api/db-status", async (req, res) => {
+app.get("/", async (req, res) => {
   try {
     const db = await getDb();
     // Try a simple operation to verify connection
