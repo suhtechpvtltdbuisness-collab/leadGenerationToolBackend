@@ -19,11 +19,9 @@ async function connectionDb() {
 
     try {
         client = new MongoClient(url, {
-            ssl: true,
-            tls: true,
-            tlsInsecure: true,
-            directConnection: false,
-            serverSelectionTimeoutMS: 10000,
+            maxPoolSize: 10,
+            serverSelectionTimeoutMS: 15000,
+            socketTimeoutMS: 45000,
         });
         await client.connect();
         console.log('✅ Connected to MongoDB');
