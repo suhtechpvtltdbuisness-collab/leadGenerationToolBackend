@@ -1,5 +1,8 @@
 {
     "version": 2,
+    "env": {
+        "NODE_VERSION": "20.x"
+    },
     "builds": [
         {
             "src": "index.js",

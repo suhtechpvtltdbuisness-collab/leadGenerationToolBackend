@@ -16,19 +16,35 @@ async function connectionDb() {
     
     // Remove quotes if present
     url = url.replace(/^["']|["']$/g, '');
+    
+    // Ensure connection string has proper options for Vercel
+    if (!url.includes('?')) {
+        url += '?retryWrites=true&w=majority';
+    }
 
     try {
-        client = new MongoClient(url, {
+        const options = {
+            tls: true,
+            tlsAllowInvalidCertificates: true,
             maxPoolSize: 10,
-            serverSelectionTimeoutMS: 15000,
+            minPoolSize: 1,
+            serverSelectionTimeoutMS: 30000,
             socketTimeoutMS: 45000,
-        });
+            family: 4, // Use IPv4, skip trying IPv6
+        };
+        
+        client = new MongoClient(url, options);
         await client.connect();
+        
+        // Verify connection with ping
+        await client.db().command({ ping: 1 });
+        
         console.log('✅ Connected to MongoDB');
         db = client.db(); // Store database instance
         return db;
     } catch (error) {
         console.error('❌ Failed to connect to MongoDB:', error.message);
+        console.error('Full error:', error);
         throw error; // Throw error instead of exiting (for serverless)
     }
 }
