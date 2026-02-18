@@ -4,9 +4,8 @@ require("dotenv").config();
 let client;
 let db;
 
-// Helper to build Mongo client options, including TLS for production
+// Helper to build Mongo client options, including optional relaxed TLS
 const buildClientOptions = () => {
-  const isProd = process.env.NODE_ENV === "production" || !!process.env.VERCEL;
   const allowInvalidTls = process.env.ALLOW_INVALID_TLS === "true";
 
   const options = {
@@ -14,15 +13,11 @@ const buildClientOptions = () => {
     serverSelectionTimeoutMS: 10000,
   };
 
-  if (isProd) {
-    // For mongodb+srv URIs TLS is usually implied, but we set it explicitly
-    options.tls = true;
-
-    // When ALLOW_INVALID_TLS=true, relax TLS validation similar to
-    // `ssl: { rejectUnauthorized: false }` but using supported v7 options.
-    if (allowInvalidTls) {
-      options.tlsAllowInvalidCertificates = true;
-    }
+  // For mongodb+srv URIs TLS is implied by the URI. When ALLOW_INVALID_TLS=true,
+  // relax TLS validation as much as possible (invalid certs, hostname mismatch).
+  // This is the closest equivalent to `ssl: { rejectUnauthorized: false }`.
+  if (allowInvalidTls) {
+    options.tlsInsecure = true;
   }
 
   return options;
