@@ -243,8 +243,9 @@ app.get('/api/search-hospitals', async (req, res) => {
 // Start Server after DB Connection (only if not on Vercel)
 const startServer = async () => {
     try {
-        await connectionDb();
+        // Only pre-connect to DB in non-serverless environment
         if (!process.env.VERCEL) {
+            await connectionDb();
             const server = app.listen(PORT, '0.0.0.0', () => {
                 console.log(`🚀 LeadFlow Backend running on http://0.0.0.0:${PORT}`);
                 console.log(`📡 Registered Routes: GET /health, POST /api/leads, GET /api/search-hospitals`);
@@ -256,6 +257,8 @@ const startServer = async () => {
                     process.exit(1);
                 }
             });
+        } else {
+            console.log('🔄 Running in serverless mode (Vercel) - DB connection will be lazy-loaded per request');
         }
     } catch (error) {
         console.error('Failed to start server:', error);

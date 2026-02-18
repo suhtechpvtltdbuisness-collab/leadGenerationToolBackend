@@ -26,11 +26,8 @@ async function connectionDb() {
         const options = {
             tls: true,
             tlsAllowInvalidCertificates: true,
-            maxPoolSize: 10,
-            minPoolSize: 1,
             serverSelectionTimeoutMS: 30000,
-            socketTimeoutMS: 45000,
-            family: 4, // Use IPv4, skip trying IPv6
+            connectTimeoutMS: 30000,
         };
         
         client = new MongoClient(url, options);
