@@ -22,7 +22,11 @@ const PORT = process.env.PORT || 5001;
 
 // CORS configuration
 const corsOptions = {
-    origin: '*',
+    origin: [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'https://lead-generation-tool-backend.vercel.app'
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
