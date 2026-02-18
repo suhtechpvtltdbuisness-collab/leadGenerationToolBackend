@@ -46,6 +46,31 @@ app.get('/health', (req, res) => {
     res.send('hii from lead generation backend');
 });
 
+// API Endpoint to check database connection
+app.get('/api/db-status', async (req, res) => {
+    try {
+        const db = await getDb();
+        // Try a simple operation to verify connection
+        await db.command({ ping: 1 });
+        res.status(200).json({
+            success: true,
+            message: 'Database connection successful',
+            dbName: db.databaseName
+        });
+    } catch (error) {
+        console.error('Database connection error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Database connection failed',
+            error: error.message,
+            envCheck: {
+                MONGODB_URI: !!process.env.MONGODB_URI,
+                DATABASSURL: !!process.env.DATABASSURL
+            }
+        });
+    }
+});
+
 // API Endpoint to store leads (single or multiple)
 app.post('/api/leads', async (req, res) => {
     console.log('📥 Received POST request to /api/leads');
