@@ -18,15 +18,10 @@ const buildClientOptions = () => {
     // For mongodb+srv URIs TLS is usually implied, but we set it explicitly
     options.tls = true;
 
-    // This roughly matches `ssl: { rejectUnauthorized: false }`
-    // when ALLOW_INVALID_TLS=true, useful for self-signed/corporate CAs.
+    // When ALLOW_INVALID_TLS=true, relax TLS validation similar to
+    // `ssl: { rejectUnauthorized: false }` but using supported v7 options.
     if (allowInvalidTls) {
-      // Newer driver options
       options.tlsAllowInvalidCertificates = true;
-
-      // Backwards-compatible aliases used by some drivers
-      options.ssl = true;
-      options.sslValidate = false;
     }
   }
 
