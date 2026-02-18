@@ -261,7 +261,12 @@ const startServer = async () => {
             console.log('🔄 Running in serverless mode (Vercel) - DB connection will be lazy-loaded per request');
         }
     } catch (error) {
-        console.error('Failed to start server:', error);
+        console.error('❌ Failed to start server due to database connection error:', error);
+
+        // In a traditional (non-serverless) environment, abort startup
+        if (!process.env.VERCEL) {
+            process.exit(1);
+        }
     }
 };
 
