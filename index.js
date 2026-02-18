@@ -50,7 +50,7 @@ app.get('/health', (req, res) => {
 app.post('/api/leads', async (req, res) => {
     console.log('📥 Received POST request to /api/leads');
     try {
-        const db = getDb();
+        const db = await getDb();
         const leadsCollection = db.collection('leads');
 
         // Handle both single lead and array of leads
@@ -85,7 +85,7 @@ app.post('/api/leads', async (req, res) => {
 app.get('/api/leads', async (req, res) => {
     console.log('📤 Received GET request to /api/leads');
     try {
-        const db = getDb();
+        const db = await getDb();
         const leadsCollection = db.collection('leads');
 
         // Fetch all leads, sorted by latest created
