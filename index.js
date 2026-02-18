@@ -34,9 +34,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Handle preflight requests
-app.options('*', cors(corsOptions));
-
 app.use(express.json());
 
 // Log all requests to debug 404s
