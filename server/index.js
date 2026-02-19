@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const mongoose = require("mongoose");
 const { connectDB } = require("../db/connection");
 
@@ -9,6 +10,19 @@ const searchRoutes = require("../routes/search");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// CORS Middleware - BEFORE other middleware and routes
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173", // Local development
+      "http://localhost:5174", // Alternative port
+      "https://lead-generation-tool-backend.vercel.app",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  }),
+);
 
 // Middleware
 app.use(express.json());
