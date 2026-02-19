@@ -78,7 +78,7 @@ router.get("/", async (req, res) => {
 
     // Wait for search results
     await page.waitForSelector('[role="article"]', { timeout: 6000 });
-    await page.waitForTimeout(1000);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Extract data from Google Maps
     const results = await page.evaluate((maxLimit) => {
