@@ -25,104 +25,130 @@ if (isProd) {
   console.log("Using puppeteer for local development");
 }
 
-// GET /api/search-hospitals - Search hospitals using Google Maps
+// GET /api/search-hospitals - Simple and fast Google Maps search
 router.get("/", async (req, res) => {
-  const { query, limit = 20, offset = 0 } = req.query;
+  const { query, limit = 20 } = req.query;
 
-  if (!query) {
-    return res.status(400).json({ error: "Query parameter is required" });
+  if (!query || query.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      error: "Query parameter is required",
+    });
   }
 
-  const maxResults = parseInt(limit);
-  const startFrom = parseInt(offset);
-
-  console.log(
-    `Searching for: ${query} | Limit: ${maxResults} | Offset: ${startFrom}`,
-  );
+  console.log(`🔍 Searching Google Maps for: "${query}"`);
 
   let browser;
   try {
+    // Launch browser with minimal configuration for speed
+    const launchOptions = {
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
+      headless: chromium ? chromium.headless : "new",
+    };
+
     if (chromium) {
-      // Use serverless Chrome
-      browser = await puppeteer.launch({
-        args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true,
-      });
-    } else {
-      // Use standard Puppeteer
-      browser = await puppeteer.launch({
-        headless: "new",
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      });
+      launchOptions.args = [...chromium.args, ...launchOptions.args];
+      launchOptions.executablePath = await chromium.executablePath();
     }
 
+    browser = await puppeteer.launch(launchOptions);
     const page = await browser.newPage();
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    );
 
+    // Block images and stylesheets for faster loading
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      if (["image", "stylesheet", "font"].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    // Navigate to Google Maps search
     const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
-    await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.goto(searchUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 12000,
+    });
 
-    // Wait for results to load
-    await page.waitForSelector('[role="article"]', { timeout: 10000 });
+    // Wait for search results
+    await page.waitForSelector('[role="article"]', { timeout: 6000 });
+    await page.waitForTimeout(1000);
 
-    // Extract hospital/business information
-    const results = await page.evaluate(() => {
+    // Extract data from Google Maps
+    const results = await page.evaluate((maxLimit) => {
       const items = document.querySelectorAll('[role="article"]');
       const data = [];
 
-      items.forEach((item) => {
+      items.forEach((item, index) => {
+        if (index >= maxLimit) return;
+
         try {
+          // Get name
           const nameEl = item.querySelector('[class*="fontHeadlineSmall"]');
+          const name = nameEl?.textContent?.trim() || null;
+
+          if (!name) return; // Skip if no name found
+
+          // Get rating
           const ratingEl = item.querySelector(
-            '[role="img"][aria-label*="stars"]',
+            '[role="img"][aria-label*="star"]',
           );
-          const addressEl = item.querySelector(
-            '[class*="fontBodyMedium"] > div:last-child',
-          );
+          const rating = ratingEl?.getAttribute("aria-label") || null;
+
+          // Get address - look for address in the text content
+          const addressEl = item.querySelector('[class*="fontBodyMedium"]');
+          const address = addressEl?.textContent?.trim() || null;
+
+          // Get phone (if available)
           const phoneEl = item.querySelector('[aria-label*="Phone"]');
+          const phoneNumber = phoneEl?.textContent?.trim() || null;
+
+          // Get website (if available)
           const websiteEl = item.querySelector('a[href*="http"]');
+          const websiteLink = websiteEl?.href || null;
 
           data.push({
-            name: nameEl ? nameEl.textContent.trim() : null,
-            rating: ratingEl ? ratingEl.getAttribute("aria-label") : null,
-            address: addressEl ? addressEl.textContent.trim() : null,
-            phoneNumber: phoneEl ? phoneEl.textContent.trim() : null,
-            websiteLink: websiteEl ? websiteEl.href : null,
+            name,
+            rating,
+            address,
+            phoneNumber,
+            websiteLink,
           });
         } catch (error) {
-          console.error("Error extracting item:", error);
+          console.error("Extraction error:", error);
         }
       });
 
       return data;
-    });
+    }, parseInt(limit));
 
     await browser.close();
 
-    // Filter out null results and apply limit/offset
-    const filteredResults = results
-      .filter((item) => item.name)
-      .slice(startFrom, startFrom + maxResults);
+    // Filter valid results
+    const validResults = results.filter((item) => item.name);
+
+    console.log(`✅ Found ${validResults.length} results for "${query}"`);
 
     res.status(200).json({
       success: true,
-      count: filteredResults.length,
+      count: validResults.length,
       query: query,
-      results: filteredResults,
+      results: validResults,
     });
   } catch (error) {
-    console.error("Error searching hospitals:", error);
+    console.error("❌ Search error:", error.message);
     if (browser) {
       await browser.close();
     }
     res.status(500).json({
       success: false,
-      error: "Failed to search hospitals",
+      error: "Failed to search",
       message: error.message,
     });
   }
