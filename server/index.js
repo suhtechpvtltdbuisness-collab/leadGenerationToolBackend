@@ -16,7 +16,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173", // Local development
-      "http://localhost:5174", // Alternative port
+      "http://localhost:5174",
+      "http://127.0.0.1:5001/", // Alternative port
       "https://lead-generation-tool-backend.vercel.app",
     ],
     credentials: true,
