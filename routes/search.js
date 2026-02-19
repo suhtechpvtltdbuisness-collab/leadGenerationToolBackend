@@ -1,18 +1,28 @@
 const express = require("express");
 const router = express.Router();
-const puppeteer = require("puppeteer");
 
-// Check if running in production
-const isProd = process.env.NODE_ENV === "production";
+// Check if running in production or serverless environment
+const isProd =
+  process.env.NODE_ENV === "production" ||
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME;
 
-// Import chromium for serverless environments if needed
+let puppeteer;
 let chromium;
+
+// Try to use serverless Chrome in production
 if (isProd) {
   try {
     chromium = require("@sparticuz/chromium");
+    puppeteer = require("puppeteer-core");
+    console.log("Using puppeteer-core with @sparticuz/chromium for serverless");
   } catch (error) {
-    console.warn("@sparticuz/chromium not found, using default puppeteer");
+    console.warn("Serverless Chrome not available, falling back to puppeteer");
+    puppeteer = require("puppeteer");
   }
+} else {
+  puppeteer = require("puppeteer");
+  console.log("Using puppeteer for local development");
 }
 
 // GET /api/search-hospitals - Search hospitals using Google Maps
@@ -32,15 +42,19 @@ router.get("/", async (req, res) => {
 
   let browser;
   try {
-    if (isProd && chromium) {
+    if (chromium) {
+      // Use serverless Chrome
       browser = await puppeteer.launch({
-        args: chromium.args,
+        args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
         defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
+        executablePath: await chromium.executablePath({
+          cacheDir: "/tmp",
+        }),
         headless: chromium.headless,
         ignoreHTTPSErrors: true,
       });
     } else {
+      // Use standard Puppeteer
       browser = await puppeteer.launch({
         headless: "new",
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
