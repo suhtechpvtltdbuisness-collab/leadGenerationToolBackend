@@ -27,7 +27,7 @@ if (isProd) {
 
 // GET /api/search-hospitals - Simple and fast Google Maps search
 router.get("/", async (req, res) => {
-  const { query, limit = 100 } = req.query;
+  const { query } = req.query;
 
   if (!query || query.trim() === "") {
     return res.status(400).json({
@@ -80,14 +80,64 @@ router.get("/", async (req, res) => {
     await page.waitForSelector('[role="article"]', { timeout: 6000 });
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
+    // Auto-scroll search results to load the maximum available cards
+    await page.evaluate(async () => {
+      const wait = (ms) =>
+        new Promise((resolve) => {
+          setTimeout(resolve, ms);
+        });
+
+      const getItems = () => document.querySelectorAll('[role="article"]');
+
+      const findScrollableContainer = () => {
+        const firstItem = getItems()[0];
+        if (!firstItem) return null;
+
+        let node = firstItem.parentElement;
+        while (node) {
+          if (node.scrollHeight > node.clientHeight + 20) {
+            return node;
+          }
+          node = node.parentElement;
+        }
+
+        return document.scrollingElement || document.body;
+      };
+
+      const scrollContainer = findScrollableContainer();
+      if (!scrollContainer) return;
+
+      let lastCount = getItems().length;
+      let stalledRounds = 0;
+      const maxRounds = 80;
+      const maxStalledRounds = 8;
+      const scrollDelayMs = 1200;
+
+      for (let round = 0; round < maxRounds; round += 1) {
+        scrollContainer.scrollTo({
+          top: scrollContainer.scrollHeight,
+          behavior: "instant",
+        });
+
+        await wait(scrollDelayMs);
+
+        const currentCount = getItems().length;
+        if (currentCount <= lastCount) {
+          stalledRounds += 1;
+          if (stalledRounds >= maxStalledRounds) break;
+        } else {
+          stalledRounds = 0;
+          lastCount = currentCount;
+        }
+      }
+    });
+
     // Extract data from Google Maps
-    const results = await page.evaluate((maxLimit) => {
+    const results = await page.evaluate(() => {
       const items = document.querySelectorAll('[role="article"]');
       const data = [];
 
       items.forEach((item, index) => {
-        if (index >= maxLimit) return;
-
         try {
           // Get name
           const nameEl = item.querySelector('[class*="fontHeadlineSmall"]');
@@ -126,7 +176,7 @@ router.get("/", async (req, res) => {
       });
 
       return data;
-    }, parseInt(limit));
+    });
 
     await browser.close();
 
