@@ -10,6 +10,8 @@ const searchRoutes = require("../routes/search");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isServerless =
+  !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 // CORS Middleware - BEFORE other middleware and routes
 app.use(
@@ -82,7 +84,14 @@ const startServer = async () => {
   }
 };
 
-// Start the server
-startServer();
+if (isServerless) {
+  // In serverless runtimes, avoid calling app.listen and just pre-warm DB.
+  connectDB().catch((error) => {
+    console.error("Serverless DB pre-warm failed:", error.message);
+  });
+} else {
+  // Start the server in traditional runtime.
+  startServer();
+}
 
 module.exports = app;
