@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const { getDb } = require("../db/connection");
 const { validateLead } = require("../models/lead");
 
@@ -61,6 +62,47 @@ router.get("/", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch leads",
+    });
+  }
+});
+
+// DELETE /api/leads/:id - Delete lead by ID
+router.delete("/:id", async (req, res) => {
+  const { id } = req.params;
+  console.log(`🗑️ Received DELETE request to /api/leads/${id}`);
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid lead ID format",
+    });
+  }
+
+  try {
+    const db = await getDb();
+    const leadsCollection = db.collection("leads");
+
+    const result = await leadsCollection.deleteOne({
+      _id: new mongoose.Types.ObjectId(id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Lead not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Lead deleted successfully",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error deleting lead:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to delete lead",
     });
   }
 });
