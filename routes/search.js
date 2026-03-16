@@ -27,7 +27,7 @@ if (isProd) {
 
 // GET /api/search-hospitals - Simple and fast Google Maps search
 router.get("/", async (req, res) => {
-  const { query, limit = 20 } = req.query;
+  const { query, limit = 100 } = req.query;
 
   if (!query || query.trim() === "") {
     return res.status(400).json({
