@@ -10,6 +10,136 @@ const isProd =
 let puppeteer;
 let chromium;
 
+const EMAIL_REGEX_GLOBAL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+const extractFirstValidEmail = (text = "") => {
+  const matches = text.match(EMAIL_REGEX_GLOBAL) || [];
+  const blockedDomains = ["example.com", "email.com", "domain.com"];
+
+  for (const raw of matches) {
+    const email = raw.trim().toLowerCase();
+    const domain = email.split("@")[1] || "";
+    if (!blockedDomains.includes(domain)) {
+      return email;
+    }
+  }
+
+  return null;
+};
+
+const resolveWebsiteUrl = (rawUrl) => {
+  if (!rawUrl) return null;
+
+  try {
+    const first = new URL(rawUrl);
+
+    // Google redirect links may include actual target in q=...
+    if (
+      (first.hostname === "www.google.com" ||
+        first.hostname === "google.com") &&
+      first.pathname === "/url"
+    ) {
+      const redirected = first.searchParams.get("q");
+      if (redirected) {
+        return new URL(redirected).toString();
+      }
+    }
+
+    return first.toString();
+  } catch (error) {
+    return null;
+  }
+};
+
+const scrapeEmailFromWebsite = async (browser, websiteUrl) => {
+  const normalized = resolveWebsiteUrl(websiteUrl);
+  if (!normalized) return null;
+
+  let page;
+  try {
+    page = await browser.newPage();
+
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      if (
+        ["image", "stylesheet", "font", "media"].includes(req.resourceType())
+      ) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    const collectEmailFromCurrentPage = async () => {
+      return page.evaluate(() => {
+        const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+        const mailto = document.querySelector('a[href^="mailto:"]');
+        const mailFromHref = mailto
+          ?.getAttribute("href")
+          ?.replace("mailto:", "")
+          ?.trim();
+        if (mailFromHref) {
+          return mailFromHref;
+        }
+
+        const bodyText = document.body?.innerText || "";
+        const fromText = bodyText.match(EMAIL_REGEX)?.[0] || null;
+        if (fromText) {
+          return fromText;
+        }
+
+        return null;
+      });
+    };
+
+    await page.goto(normalized, {
+      waitUntil: "domcontentloaded",
+      timeout: 9000,
+    });
+
+    const directEmail = await collectEmailFromCurrentPage();
+    const directClean = extractFirstValidEmail(directEmail || "");
+    if (directClean) {
+      await page.close();
+      return directClean;
+    }
+
+    const candidatePaths = ["/contact", "/contact-us", "/about", "/about-us"];
+    const base = new URL(normalized);
+
+    for (const path of candidatePaths) {
+      try {
+        const candidateUrl = new URL(
+          path,
+          `${base.protocol}//${base.host}`,
+        ).toString();
+        await page.goto(candidateUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 7000,
+        });
+
+        const email = await collectEmailFromCurrentPage();
+        const clean = extractFirstValidEmail(email || "");
+        if (clean) {
+          await page.close();
+          return clean;
+        }
+      } catch (error) {
+        // Ignore navigation failures for optional pages
+      }
+    }
+
+    await page.close();
+    return null;
+  } catch (error) {
+    if (page) {
+      await page.close();
+    }
+    return null;
+  }
+};
+
 // Try to use serverless Chrome in production
 if (isProd) {
   try {
@@ -132,13 +262,69 @@ router.get("/", async (req, res) => {
       }
     });
 
-    // Extract data from Google Maps
+    // Extract data from Google Maps list cards
     const results = await page.evaluate(() => {
       const items = document.querySelectorAll('[role="article"]');
       const data = [];
 
+      const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+      const PHONE_REGEX = /(\+?\d[\d\s().-]{7,}\d)/;
+
+      const normalizeWebsite = (href) => {
+        if (!href) return null;
+
+        try {
+          const url = new URL(href);
+          const host = (url.hostname || "").replace(/^www\./, "").toLowerCase();
+          const path = (url.pathname || "").toLowerCase();
+
+          // Ignore Google and Maps links - these are not business websites
+          const isGoogleHost =
+            host === "google.com" ||
+            host.endsWith(".google.com") ||
+            host === "g.page" ||
+            host.endsWith(".g.page") ||
+            host === "goo.gl";
+
+          const isMapsPath =
+            path.startsWith("/maps") ||
+            path.startsWith("/search") ||
+            path.startsWith("/place");
+
+          if (isGoogleHost && isMapsPath) {
+            return null;
+          }
+
+          return href;
+        } catch (error) {
+          return null;
+        }
+      };
+
+      const findPhoneNumber = (item, textBlob) => {
+        const phoneEl = item.querySelector('[aria-label*="Phone"]');
+        const phoneFromElement = phoneEl?.textContent?.trim();
+        if (phoneFromElement) return phoneFromElement;
+
+        const phoneFromText = textBlob.match(PHONE_REGEX)?.[0]?.trim();
+        return phoneFromText || null;
+      };
+
+      const findEmail = (item, textBlob) => {
+        const mailtoEl = item.querySelector('a[href^="mailto:"]');
+        const mailFromHref = mailtoEl
+          ?.getAttribute("href")
+          ?.replace("mailto:", "");
+        if (mailFromHref) return mailFromHref.trim();
+
+        const mailFromText = textBlob.match(EMAIL_REGEX)?.[0]?.trim();
+        return mailFromText || null;
+      };
+
       items.forEach((item, index) => {
         try {
+          const textBlob = item.textContent || "";
+
           // Get name
           const nameEl = item.querySelector('[class*="fontHeadlineSmall"]');
           const name = nameEl?.textContent?.trim() || null;
@@ -155,19 +341,26 @@ router.get("/", async (req, res) => {
           const addressEl = item.querySelector('[class*="fontBodyMedium"]');
           const address = addressEl?.textContent?.trim() || null;
 
-          // Get phone (if available)
-          const phoneEl = item.querySelector('[aria-label*="Phone"]');
-          const phoneNumber = phoneEl?.textContent?.trim() || null;
+          // Get phone/email (if available)
+          const phoneNumber = findPhoneNumber(item, textBlob);
+          const email = findEmail(item, textBlob);
 
           // Get website (if available)
-          const websiteEl = item.querySelector('a[href*="http"]');
-          const websiteLink = websiteEl?.href || null;
+          const websiteCandidates = Array.from(
+            item.querySelectorAll('a[href^="http"]'),
+          );
+          const websiteLink =
+            websiteCandidates
+              .map((a) => normalizeWebsite(a.href))
+              .find(Boolean) || null;
 
           data.push({
+            index,
             name,
             rating,
             address,
             phoneNumber,
+            email,
             websiteLink,
           });
         } catch (error) {
@@ -178,10 +371,178 @@ router.get("/", async (req, res) => {
       return data;
     });
 
+    // Open each place detail to enrich website/email/phone from detail panel
+    const listCount = await page.$$eval(
+      '[role="article"]',
+      (nodes) => nodes.length,
+    );
+    const detailByIndex = {};
+
+    for (let i = 0; i < listCount; i += 1) {
+      try {
+        const cards = await page.$$('[role="article"]');
+        const card = cards[i];
+        if (!card) continue;
+
+        await card.click();
+
+        // Short wait for detail panel to update (no navigation wait - maps is SPA)
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        const detail = await page.evaluate(() => {
+          const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+          const PHONE_REGEX = /(\+?\d[\d\s().-]{7,}\d)/;
+
+          // Extract Google Maps link from detail panel
+          const getMapsLink = () => {
+            const mapLinks = Array.from(
+              document.querySelectorAll('a[href*="/maps/place"]'),
+            );
+            // Get the most recent/first valid maps link
+            for (const mapLink of mapLinks) {
+              if (
+                mapLink?.href &&
+                mapLink.href.includes("/place/") &&
+                !mapLink.href.includes("Monarch")
+              ) {
+                return mapLink.href;
+              }
+            }
+            return null;
+          };
+
+          const cleanWebsite = (href) => {
+            if (!href) return null;
+
+            try {
+              const raw = new URL(href);
+              let resolved = href;
+
+              // Google redirect links often store target in "q"
+              if (
+                (raw.hostname === "www.google.com" ||
+                  raw.hostname === "google.com") &&
+                raw.pathname === "/url"
+              ) {
+                const redirected = raw.searchParams.get("q");
+                if (redirected) {
+                  resolved = redirected;
+                }
+              }
+
+              const url = new URL(resolved);
+              const host = (url.hostname || "")
+                .replace(/^www\./, "")
+                .toLowerCase();
+              const path = (url.pathname || "").toLowerCase();
+
+              const isGoogleHost =
+                host === "google.com" ||
+                host.endsWith(".google.com") ||
+                host === "g.page" ||
+                host.endsWith(".g.page") ||
+                host === "goo.gl" ||
+                host === "google.co.in";
+
+              const isMapsPath =
+                path.startsWith("/maps") ||
+                path.startsWith("/search") ||
+                path.startsWith("/place") ||
+                path.startsWith("/intl");
+
+              if (isGoogleHost && isMapsPath) {
+                return null;
+              }
+
+              return url.toString();
+            } catch (error) {
+              return null;
+            }
+          };
+
+          // Extract from detail panel - focus on right-side panel content
+          const rightPanel =
+            document.querySelector('[role="region"]') || document.body;
+          const panelText = rightPanel?.innerText || "";
+
+          // Get website from detail links
+          const websiteAnchors = Array.from(
+            rightPanel.querySelectorAll('a[href^="http"]') || [],
+          );
+          const websiteLink =
+            websiteAnchors
+              .map((a) => cleanWebsite(a.href))
+              .find((url) => url && !url.includes("google")) || null;
+
+          // Get phone from detail
+          const phoneBtn = rightPanel.querySelector(
+            'button[data-item-id^="phone:tel:"]',
+          );
+          const phoneFromBtn = phoneBtn
+            ?.getAttribute("data-item-id")
+            ?.replace("phone:tel:", "");
+          const phoneNumber =
+            (phoneFromBtn && decodeURIComponent(phoneFromBtn)) ||
+            panelText.match(PHONE_REGEX)?.[0]?.trim() ||
+            null;
+
+          // Get email from detail
+          const mailtoEl = rightPanel.querySelector('a[href^="mailto:"]');
+          const email =
+            mailtoEl?.getAttribute("href")?.replace("mailto:", "")?.trim() ||
+            panelText.match(EMAIL_REGEX)?.[0]?.trim() ||
+            null;
+
+          return {
+            mapsLink: getMapsLink(),
+            websiteLink,
+            phoneNumber,
+            email,
+          };
+        });
+
+        detailByIndex[i] = detail;
+      } catch (detailError) {
+        // Continue without failing the whole request if one detail card fails
+        detailByIndex[i] = null;
+      }
+    }
+
+    const enrichedResults = results.map((item) => {
+      const detail = detailByIndex[item.index] || {};
+      return {
+        ...item,
+        mapsLink: detail.mapsLink || null,
+        phoneNumber: detail.phoneNumber || item.phoneNumber || null,
+        email: (detail.email || item.email || null)?.toLowerCase?.() || null,
+        websiteLink: detail.websiteLink || item.websiteLink || null,
+      };
+    });
+
+    // Validation: detect and remove cached/duplicate data across results
+    const seenDetail = {};
+    const validEnrichedResults = enrichedResults.filter((item) => {
+      const key = `${item.phoneNumber}|${item.email}|${item.websiteLink}`;
+
+      // If we see the exact same combo twice, skip the duplicate
+      if (seenDetail[key]) {
+        console.warn(`⚠️ Skipping duplicate detail for ${item.name}`);
+        return false;
+      }
+
+      seenDetail[key] = true;
+      return true;
+    });
+
     await browser.close();
 
     // Filter valid results
-    const validResults = results.filter((item) => item.name);
+    const validResults = validEnrichedResults
+      .filter((item) => item.name)
+      .map((item) => {
+        const { index, ...rest } = item;
+        return rest;
+      });
 
     console.log(`✅ Found ${validResults.length} results for "${query}"`);
 
