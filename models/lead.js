@@ -33,7 +33,7 @@ const leadSchema = {
           bsonType: ["string", "null"],
           description: "Website link of the lead",
         },
-        googleLink: {
+        mapsLink: {
           bsonType: ["string", "null"],
           description: "Google Maps link of the lead",
         },
@@ -69,7 +69,7 @@ const validateLead = (leadData) => {
     phoneNumber: leadData.phoneNumber || leadData.phone || null,
     email: leadData.email || null,
     websiteLink: leadData.websiteLink || leadData.website || null,
-    googleLink: leadData.googleLink || leadData.mapsLink || null,
+    mapsLink: leadData.mapsLink || leadData.googleLink || null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -77,4 +77,3 @@ const validateLead = (leadData) => {
 
 
 module.exports = { leadSchema, validateLead };
-
