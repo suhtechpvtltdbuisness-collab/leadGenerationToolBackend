@@ -354,6 +354,9 @@ router.get("/", async (req, res) => {
               .map((a) => normalizeWebsite(a.href))
               .find(Boolean) || null;
 
+          // Get maps link (if available) from the card header link
+          const mapsLinkFromCard = item.querySelector('a[href*="/maps/place"]')?.href || null;
+
           data.push({
             index,
             name,
@@ -362,6 +365,7 @@ router.get("/", async (req, res) => {
             phoneNumber,
             email,
             websiteLink,
+            mapsLink: mapsLinkFromCard,
           });
         } catch (error) {
           console.error("Extraction error:", error);
@@ -387,27 +391,33 @@ router.get("/", async (req, res) => {
         await card.click();
 
         // Short wait for detail panel to update (no navigation wait - maps is SPA)
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
         const detail = await page.evaluate(() => {
           const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
           const PHONE_REGEX = /(\+?\d[\d\s().-]{7,}\d)/;
 
-          // Extract Google Maps link from detail panel
+          // Extract Google Maps link from detail panel or current URL
           const getMapsLink = () => {
+            // Priority 1: Current URL (if it's a place detail page)
+            if (window.location.href.includes("/maps/place/")) {
+              return window.location.href;
+            }
+
+            // Priority 2: Look for social share link or specific detail links
             const mapLinks = Array.from(
               document.querySelectorAll('a[href*="/maps/place"]'),
             );
-            // Get the most recent/first valid maps link
-            for (const mapLink of mapLinks) {
-              if (
-                mapLink?.href &&
-                mapLink.href.includes("/place/") &&
-                !mapLink.href.includes("Monarch")
-              ) {
-                return mapLink.href;
+            
+            // If we are in the detail view, many links in the right panel go to the same place
+            const detailPanel = document.querySelector('[role="region"]');
+            if (detailPanel) {
+              const panelLinks = Array.from(detailPanel.querySelectorAll('a[href*="/maps/place"]'));
+              if (panelLinks.length > 0) {
+                return panelLinks[0].href;
               }
             }
+
             return null;
           };
 
@@ -512,7 +522,7 @@ router.get("/", async (req, res) => {
       const detail = detailByIndex[item.index] || {};
       return {
         ...item,
-        mapsLink: detail.mapsLink || null,
+        mapsLink: detail.mapsLink || item.mapsLink || null,
         phoneNumber: detail.phoneNumber || item.phoneNumber || null,
         email: (detail.email || item.email || null)?.toLowerCase?.() || null,
         websiteLink: detail.websiteLink || item.websiteLink || null,
