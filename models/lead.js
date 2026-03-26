@@ -9,6 +9,10 @@ const leadSchema = {
           bsonType: "string",
           description: "Name is required",
         },
+        serialNumber: {
+          bsonType: ["int", "long", "null"],
+          description: "Serial number or index of the lead",
+        },
         rating: {
           bsonType: ["string", "null"],
           description: "Rating of the lead",
@@ -21,9 +25,17 @@ const leadSchema = {
           bsonType: ["string", "null"],
           description: "Phone number of the lead",
         },
+        email: {
+          bsonType: ["string", "null"],
+          description: "Email of the lead",
+        },
         websiteLink: {
           bsonType: ["string", "null"],
           description: "Website link of the lead",
+        },
+        googleLink: {
+          bsonType: ["string", "null"],
+          description: "Google Maps link of the lead",
         },
         createdAt: {
           bsonType: "date",
@@ -50,13 +62,19 @@ const validateLead = (leadData) => {
 
   return {
     name: leadData.name.trim(),
+    serialNumber:
+      leadData.serialNumber || leadData.srNo || leadData.index || null,
     rating: leadData.rating || null,
     address: leadData.address || null,
-    phoneNumber: leadData.phoneNumber || null,
-    websiteLink: leadData.websiteLink || null,
+    phoneNumber: leadData.phoneNumber || leadData.phone || null,
+    email: leadData.email || null,
+    websiteLink: leadData.websiteLink || leadData.website || null,
+    googleLink: leadData.googleLink || leadData.mapsLink || null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 };
 
+
 module.exports = { leadSchema, validateLead };
+

@@ -541,8 +541,12 @@ router.get("/", async (req, res) => {
       .filter((item) => item.name)
       .map((item) => {
         const { index, ...rest } = item;
-        return rest;
+        return {
+          serialNumber: index + 1,
+          ...rest,
+        };
       });
+
 
     console.log(`✅ Found ${validResults.length} results for "${query}"`);
 
