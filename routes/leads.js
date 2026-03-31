@@ -66,6 +66,54 @@ router.get("/", async (req, res) => {
   }
 });
 
+// DELETE /api/leads - Bulk delete leads by array of IDs
+// Body: { "ids": ["<id1>", "<id2>", ...] }
+router.delete("/", async (req, res) => {
+  console.log("🗑️ Received bulk DELETE request to /api/leads");
+
+  const { ids } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Request body must contain a non-empty 'ids' array",
+    });
+  }
+
+  // Validate every ID before hitting the DB
+  const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidIds.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid ID format: ${invalidIds.join(", ")}`,
+    });
+  }
+
+  try {
+    const db = await getDb();
+    const leadsCollection = db.collection("leads");
+
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    const result = await leadsCollection.deleteMany({
+      _id: { $in: objectIds },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} lead(s) deleted successfully`,
+      deletedCount: result.deletedCount,
+      requestedCount: ids.length,
+    });
+  } catch (error) {
+    console.error("Error bulk deleting leads:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to delete leads",
+    });
+  }
+});
+
 // DELETE /api/leads/:id - Delete lead by ID
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;
