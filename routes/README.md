@@ -111,6 +111,82 @@ GET /api/search-hospitals?query=hospitals in Boston&limit=10&offset=0
 }
 ```
 
+## Tasks Routes (`/api/tasks`)
+
+### POST /api/tasks
+
+Create one or many tasks.
+
+**Request Body (Single Task):**
+
+```json
+{
+  "title": "Kick-off call with Innovate Corp",
+  "assignee": "Sarah Chen",
+  "phone": "(555) 987-6543",
+  "email": "sarah.chen@innovatecorp.com",
+  "source": "LinkedIn Ad",
+  "dueDate": "2026-06-04",
+  "status": "To Do",
+  "priority": "High",
+  "notes": "Prepare project scope questions"
+}
+```
+
+### GET /api/tasks
+
+Get paginated tasks with optional filtering/sorting.
+
+**Query Params (all optional):**
+
+- `page` (default: `1`)
+- `limit` (default: `10`, max: `100`)
+- `status` (`To Do`, `In Progress`, `Done`)
+- `priority` (`High`, `Medium`, `Low`)
+- `source` (exact match)
+- `search` (matches title, assignee, phone, email, source)
+- `dueDateFrom` (ISO date)
+- `dueDateTo` (ISO date)
+- `sortBy` (`title`, `assignee`, `dueDate`, `status`, `priority`, `createdAt`, `updatedAt`)
+- `sortOrder` (`asc` or `desc`)
+
+### GET /api/tasks/:id
+
+Get a single task by ID.
+
+### PATCH /api/tasks/:id
+
+Partially update a task by ID.
+
+### DELETE /api/tasks/:id
+
+Delete one task by ID.
+
+### PATCH /api/tasks/bulk-status
+
+Update status for multiple tasks.
+
+**Request Body:**
+
+```json
+{
+  "ids": ["id1", "id2"],
+  "status": "Done"
+}
+```
+
+### DELETE /api/tasks
+
+Delete multiple tasks by IDs.
+
+**Request Body:**
+
+```json
+{
+  "ids": ["id1", "id2"]
+}
+```
+
 ## Health Check Routes
 
 ### GET /api/db-status

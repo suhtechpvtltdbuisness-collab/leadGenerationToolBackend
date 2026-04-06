@@ -7,6 +7,7 @@ const { connectDB } = require("../db/connection");
 // Import routes
 const leadsRoutes = require("../routes/leads");
 const searchRoutes = require("../routes/search");
+const tasksRoutes = require("../routes/tasks");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -39,6 +40,7 @@ app.get("/", (req, res) => {
 // API Routes
 app.use("/api/leads", leadsRoutes);
 app.use("/api/search-hospitals", searchRoutes);
+app.use("/api/tasks", tasksRoutes);
 
 // Database connection status route
 app.get("/api/db-status", (req, res) => {
